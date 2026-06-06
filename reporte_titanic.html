@@ -1,0 +1,274 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Predicción de supervivencia en el Titanic</title>
+  <style>
+    :root {
+      --ink: #1f2430;
+      --muted: #626b7f;
+      --line: #dfe3ec;
+      --blue: #2e4780;
+      --blue-light: #eaf1fe;
+      --gold: #b8a037;
+      --paper: #ffffff;
+      --surface: #f7f8fb;
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; background: #e9ebf1; color: var(--ink); }
+    body { font-family: "Segoe UI", Arial, sans-serif; line-height: 1.35; }
+    .page {
+      width: 210mm;
+      height: 297mm;
+      margin: 10mm auto;
+      padding: 14mm 16mm 13mm;
+      background: var(--paper);
+      position: relative;
+      overflow: hidden;
+      page-break-after: always;
+    }
+    .page:last-child { page-break-after: auto; }
+    .eyebrow {
+      color: var(--blue);
+      font-size: 8.5pt;
+      font-weight: 700;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+    }
+    h1 { font-size: 25pt; line-height: 1.08; margin: 8mm 0 3mm; color: var(--blue); }
+    h2 { font-size: 15pt; margin: 5mm 0 2.5mm; color: var(--blue); border-bottom: 1px solid var(--line); padding-bottom: 1.5mm; }
+    h3 { font-size: 11pt; margin: 4mm 0 1.5mm; }
+    p, li { font-size: 9.2pt; margin-top: 0; }
+    ul, ol { margin: 1.5mm 0 3mm; padding-left: 5mm; }
+    li { margin-bottom: 1mm; }
+    .lead { font-size: 11pt; color: var(--muted); max-width: 160mm; }
+    .summary {
+      background: var(--blue-light);
+      border-left: 4px solid var(--blue);
+      padding: 4mm 5mm;
+      margin: 5mm 0;
+    }
+    .summary strong { color: var(--blue); }
+    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 7mm; }
+    .metric-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 2.5mm; margin: 4mm 0; }
+    .metric {
+      border: 1px solid var(--line);
+      border-radius: 2mm;
+      padding: 3mm;
+      background: var(--surface);
+    }
+    .metric .value { font-size: 15pt; font-weight: 700; color: var(--blue); }
+    .metric .label { font-size: 7.5pt; color: var(--muted); }
+    .figure { margin: 4mm 0 3mm; text-align: center; }
+    .figure img { max-width: 100%; max-height: 78mm; object-fit: contain; }
+    .figure.compact img { max-height: 67mm; }
+    .caption { font-size: 7.5pt; color: var(--muted); text-align: left; margin-top: 1mm; }
+    table { width: 100%; border-collapse: collapse; margin: 3mm 0; font-size: 7.4pt; }
+    th { background: var(--blue); color: white; padding: 2mm 1.4mm; text-align: center; }
+    td { border-bottom: 1px solid var(--line); padding: 1.8mm 1.4mm; text-align: center; }
+    td:first-child, th:first-child { text-align: left; }
+    tr.selected td { background: var(--blue-light); font-weight: 700; }
+    .note { font-size: 8pt; color: var(--muted); }
+    .status {
+      display: inline-block;
+      padding: 1mm 2.5mm;
+      border-radius: 10mm;
+      background: #fff4c2;
+      color: #736422;
+      font-size: 8pt;
+      font-weight: 700;
+    }
+    .footer {
+      position: absolute;
+      bottom: 7mm;
+      left: 16mm;
+      right: 16mm;
+      display: flex;
+      justify-content: space-between;
+      border-top: 1px solid var(--line);
+      padding-top: 2mm;
+      color: var(--muted);
+      font-size: 7.5pt;
+    }
+    @page { size: A4 portrait; margin: 0; }
+    @media print {
+      html, body { background: white; }
+      .page { margin: 0; box-shadow: none; }
+    }
+  </style>
+</head>
+<body>
+  <section class="page">
+    <div class="eyebrow">Proyecto de clasificación supervisada · Junio 2026</div>
+    <h1>Predicción de supervivencia en el Titanic</h1>
+    <p class="lead">Comparación reproducible de cinco modelos mediante pipelines de scikit-learn, con preprocesamiento integrado, validación estratificada y evaluación final sobre un conjunto de prueba reservado.</p>
+
+    <div class="summary">
+      <strong>Resultado técnico.</strong> Se seleccionó <strong>HistGradientBoosting</strong> por su F1 promedio de validación cruzada de <strong>0.759</strong>. En prueba alcanzó F1 <strong>0.738</strong> y ROC-AUC <strong>0.814</strong>. La brecha train/test de F1 fue +0.160, por lo que existen indicios de sobreajuste.
+    </div>
+
+    <h2>1. Introducción</h2>
+    <p>El objetivo es predecir la variable binaria <code>Survived</code>, donde 0 significa “no sobrevivió” y 1 “sobrevivió”. El conjunto contiene 891 pasajeros y 12 variables. La evaluación prioriza F1, sensibilidad y ROC-AUC además de exactitud, porque la clase positiva representa 38.38 % de las observaciones.</p>
+
+    <h2>2. Variables usadas</h2>
+    <div class="grid-2">
+      <div>
+        <h3>Predictoras</h3>
+        <p><strong>Numéricas:</strong> Pclass, Age, SibSp, Parch y Fare.</p>
+        <p><strong>Categóricas:</strong> Sex y Embarked.</p>
+      </div>
+      <div>
+        <h3>Exclusiones</h3>
+        <p><strong>PassengerId</strong> es un identificador. <strong>Name</strong> y <strong>Ticket</strong> tienen alta cardinalidad. <strong>Cabin</strong> presenta 687 faltantes (77.10 %) y requeriría una estrategia específica fuera del alcance base.</p>
+      </div>
+    </div>
+
+    <div class="figure compact">
+      <img src="resultados/distribucion_survived.png" alt="Distribución de Survived">
+      <div class="caption">Figura 1. Distribución de la variable objetivo: 549 no sobrevivientes y 342 sobrevivientes.</div>
+    </div>
+    <div class="footer"><span>Fuente: Titanic-Dataset.csv</span><span>1 / 4</span></div>
+  </section>
+
+  <section class="page">
+    <div class="eyebrow">Método y comparación</div>
+    <h2>3. Diseño del preprocesamiento</h2>
+    <p>La partición fue 80 % entrenamiento (712 filas) y 20 % prueba (179 filas), con <code>random_state=42</code> y estratificación. El <code>ColumnTransformer</code> aplica imputación por media y escalamiento a las variables numéricas. Para Sex y Embarked usa imputación con <code>Unknown</code> y one-hot encoding con categorías desconocidas ignoradas.</p>
+    <p>El transformador está dentro de cada <code>Pipeline</code>. Así, imputadores, escalador y codificador se ajustan exclusivamente con el subconjunto de entrenamiento de cada fold, lo que evita fuga de datos.</p>
+
+    <h2>4. Modelos evaluados</h2>
+    <p>Se compararon regresión logística como línea base interpretable; K vecinos como método basado en distancias; árbol de decisión restringido; bosque aleatorio como ensamble estable; e HistGradientBoosting como boosting eficiente para datos tabulares y relaciones no lineales.</p>
+
+    <h2>5. Resultados</h2>
+    <div class="metric-grid">
+      <div class="metric"><div class="value">0.810</div><div class="label">Exactitud</div></div>
+      <div class="metric"><div class="value">0.787</div><div class="label">Precisión</div></div>
+      <div class="metric"><div class="value">0.696</div><div class="label">Sensibilidad</div></div>
+      <div class="metric"><div class="value">0.738</div><div class="label">F1</div></div>
+      <div class="metric"><div class="value">0.814</div><div class="label">ROC-AUC</div></div>
+    </div>
+
+    <table>
+      <thead>
+        <tr>
+          <th>Modelo</th><th>Exact.</th><th>Prec.</th><th>Sens.</th><th>F1</th><th>ROC-AUC</th><th>F1 CV</th>
+        </tr>
+      </thead>
+      <tbody>
+        
+        <tr class="selected">
+          <td>HistGradientBoosting</td>
+          <td>0.810</td>
+          <td>0.787</td>
+          <td>0.696</td>
+          <td>0.738</td>
+          <td>0.814</td>
+          <td>0.759 ± 0.033</td>
+        </tr>
+        
+        <tr class="">
+          <td>Bosque aleatorio</td>
+          <td>0.810</td>
+          <td>0.830</td>
+          <td>0.638</td>
+          <td>0.721</td>
+          <td>0.846</td>
+          <td>0.737 ± 0.024</td>
+        </tr>
+        
+        <tr class="">
+          <td>Regresión logística</td>
+          <td>0.804</td>
+          <td>0.793</td>
+          <td>0.667</td>
+          <td>0.724</td>
+          <td>0.845</td>
+          <td>0.726 ± 0.034</td>
+        </tr>
+        
+        <tr class="">
+          <td>Árbol de decisión</td>
+          <td>0.760</td>
+          <td>0.732</td>
+          <td>0.594</td>
+          <td>0.656</td>
+          <td>0.792</td>
+          <td>0.721 ± 0.013</td>
+        </tr>
+        
+        <tr class="">
+          <td>K vecinos</td>
+          <td>0.810</td>
+          <td>0.787</td>
+          <td>0.696</td>
+          <td>0.738</td>
+          <td>0.859</td>
+          <td>0.720 ± 0.026</td>
+        </tr>
+        
+      </tbody>
+    </table>
+    <p class="note">La selección no usa la prueba: ordena por F1 promedio de validación cruzada, después ROC-AUC promedio y finalmente menor variabilidad. La tabla resalta el modelo seleccionado.</p>
+
+    <div class="figure compact">
+      <img src="resultados/comparacion_modelos.png" alt="Comparación de modelos">
+      <div class="caption">Figura 2. Comparación de exactitud, F1 y ROC-AUC en prueba. Las cifras exactas se conservan en resultados/comparacion_modelos.csv.</div>
+    </div>
+    <div class="footer"><span>Validación: StratifiedKFold, 5 folds</span><span>2 / 4</span></div>
+  </section>
+
+  <section class="page">
+    <div class="eyebrow">Diagnóstico del modelo seleccionado</div>
+    <h2>6. Matriz de confusión</h2>
+    <p>El modelo identificó 48 sobrevivientes y 97 no sobrevivientes correctamente. Produjo 13 falsos positivos y 21 falsos negativos. La sensibilidad de 0.696 muestra que aún se pierde una fracción relevante de la clase positiva.</p>
+
+    <div class="figure">
+      <img src="resultados/matriz_confusion.png" alt="Matriz de confusión">
+      <div class="caption">Figura 3. Matriz de confusión de HistGradientBoosting sobre 179 observaciones de prueba.</div>
+    </div>
+
+    <h2>7. Análisis de sobreajuste</h2>
+    <p><span class="status">Indicios de sobreajuste</span></p>
+    <p>El F1 de entrenamiento fue 0.898 y el de prueba 0.738; la diferencia de +0.160 es material. Aunque la validación cruzada fue relativamente estable (desviación F1 0.033), el desempeño final indica que el boosting aprendió patrones más específicos del entrenamiento.</p>
+
+    <div class="figure compact">
+      <img src="resultados/comparacion_train_test.png" alt="Comparación de F1 entrenamiento y prueba">
+      <div class="caption">Figura 4. Comparación de F1 por modelo. La prueba se mantuvo fuera de la selección.</div>
+    </div>
+    <div class="footer"><span>Evaluación final reservada: 20 %</span><span>3 / 4</span></div>
+  </section>
+
+  <section class="page">
+    <div class="eyebrow">Conclusión y segunda versión</div>
+    <h2>8. Conclusión</h2>
+    <p><strong>Modelo seleccionado:</strong> HistGradientBoosting. Se eligió por obtener el mayor F1 promedio de validación cruzada (0.759), con ROC-AUC promedio 0.877. El resultado confirma que un modelo no lineal puede capturar interacciones útiles en estas variables tabulares.</p>
+    <p>La selección es metodológicamente defendible, pero no implica que sea el mejor modelo para producción. En prueba, K vecinos igualó el F1 de 0.738 y otros modelos obtuvieron un ROC-AUC mayor. Además, la brecha train/test del seleccionado obliga a reportar sobreajuste.</p>
+
+    <h3>Limitaciones principales</h3>
+    <ul>
+      <li>El conjunto es pequeño, histórico y representa una situación específica.</li>
+      <li>Se excluyen variables de texto y cabina para respetar el alcance; podrían contener señal útil.</li>
+      <li>La partición de prueba tiene 179 casos, por lo que las métricas tienen incertidumbre.</li>
+      <li>Las asociaciones predictivas no establecen causas de supervivencia.</li>
+    </ul>
+
+    <h3>Mejoras recomendadas</h3>
+    <ol>
+      <li>Agregar FamilySize, IsAlone y títulos extraídos de Name.</li>
+      <li>Regularizar el boosting y ajustar hiperparámetros con validación anidada.</li>
+      <li>Calibrar probabilidades y reportar intervalos de confianza.</li>
+      <li>Evaluar métricas por sexo y clase para detectar desempeño desigual.</li>
+      <li>Conservar un conjunto final bloqueado al iterar una segunda versión.</li>
+    </ol>
+
+    <h3>Reproducibilidad</h3>
+    <p>El notebook ejecuta las 16 etapas solicitadas, guarda métricas y gráficos, prueba una categoría no observada y usa semilla fija. Las dependencias están definidas en <code>requirements.txt</code>; la guía de ejecución se encuentra en <code>README.md</code>.</p>
+
+    <div class="summary">
+      <strong>Dictamen.</strong> El flujo cumple la consigna y es reproducible. El resultado debe comunicarse como una comparación académica con indicios de sobreajuste, no como un sistema listo para decisiones reales.
+    </div>
+    <div class="footer"><span>Proyecto Titanic · Reporte técnico</span><span>4 / 4</span></div>
+  </section>
+</body>
+</html>
